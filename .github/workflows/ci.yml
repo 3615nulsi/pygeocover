@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[test]"
+      - run: pytest -q
+
+  publish:
+    # publication PyPI par « Trusted Publishing » (aucun mot de passe stocké)
+    if: github.event_name == 'release'
+    needs: tests
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
