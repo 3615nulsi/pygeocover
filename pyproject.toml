@@ -18,7 +18,7 @@ Homepage = "https://github.com/3615nulsi/pygeocover"
 Issues = "https://github.com/3615nulsi/pygeocover/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8", "pytest-asyncio>=0.23", "aioresponses>=0.7"]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 pygeocover = "pygeocover.cli:main"

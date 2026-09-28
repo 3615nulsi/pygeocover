@@ -1,7 +1,76 @@
-"""Données fictives reproduisant la forme des vraies réponses de l'API."""
+"""Données fictives reproduisant la forme des vraies réponses de l'API, et session HTTP simulée."""
 from __future__ import annotations
 
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 import pytest
+
+
+class FakeResponse:
+    def __init__(self, status: int, payload: Any) -> None:
+        self.status = status
+        self._payload = payload
+
+    async def json(self, content_type: Optional[str] = None) -> Any:
+        return self._payload
+
+    async def text(self) -> str:
+        return str(self._payload)
+
+
+@dataclass
+class Call:
+    method: str
+    url: str
+    kwargs: Dict[str, Any]
+
+
+class _Ctx:
+    def __init__(self, response: FakeResponse | None, exception: BaseException | None) -> None:
+        self._response, self._exception = response, exception
+
+    async def __aenter__(self) -> FakeResponse:
+        if self._exception is not None:
+            raise self._exception
+        return self._response  # type: ignore[return-value]
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None
+
+
+class FakeSession:
+    """Remplace aiohttp.ClientSession : le client n'utilise que `session.request(...)`.
+
+    Les réponses d'une même route (méthode + URL sans paramètres) sont servies dans l'ordre
+    d'enregistrement ; `repeat=True` rejoue indéfiniment la dernière.
+    """
+
+    def __init__(self) -> None:
+        self._routes: Dict[tuple, List[dict]] = defaultdict(list)
+        self.calls: List[Call] = []
+
+    def add(self, method: str, url: str, *, status: int = 200, payload: Any = None,
+            exception: BaseException | None = None, repeat: bool = False) -> None:
+        self._routes[(method.upper(), url)].append(
+            {"status": status, "payload": payload, "exception": exception, "repeat": repeat})
+
+    def request(self, method: str, url: str, **kwargs: Any) -> _Ctx:
+        self.calls.append(Call(method.upper(), url, kwargs))
+        queue = self._routes.get((method.upper(), url))
+        if not queue:
+            raise AssertionError(f"Requête inattendue : {method} {url}")
+        spec = queue[0] if queue[0]["repeat"] else queue.pop(0)
+        return _Ctx(FakeResponse(spec["status"], spec["payload"]), spec["exception"])
+
+    def calls_to(self, method: str, url: str) -> List[Call]:
+        return [c for c in self.calls if c.method == method.upper() and c.url == url]
+
+
+@pytest.fixture
+def session() -> FakeSession:
+    return FakeSession()
 
 LOGIN_SETTINGS = {
     "idp_client_id": "idp-client",
