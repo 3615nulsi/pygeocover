@@ -17,6 +17,7 @@
   (was `GeocoverLoginError`).
 - A ride list answered with HTTP 204 is treated as empty.
 - Exception and log messages are in English.
+- Python 3.10 or later is required (3.9 is end-of-life).
 
 ## [0.1.0]
 - First release.
