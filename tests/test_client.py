@@ -6,8 +6,8 @@ import aiohttp
 import pytest
 
 from pygeocover import (
-    GeocoverAuthError, GeocoverClient, GeocoverConnectionError, GeocoverLoginError, LoginRequest,
-    TokenSet,
+    GeocoverApiError, GeocoverAuthError, GeocoverClient, GeocoverConnectionError,
+    GeocoverLoginError, GeocoverRateLimitError, GeocoverResponseError, LoginRequest, TokenSet,
 )
 from pygeocover.const import IDS_API, TOKEN_URL, bike_api_url
 
@@ -154,3 +154,88 @@ async def test_locations_sends_iso_dates(session):
     await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_locations(1, start, end)
     assert session.calls[0].kwargs["params"] == {
         "from": "2026-09-27T00:00:00+0000", "till": "2026-09-28T00:00:00+0000"}
+
+
+async def test_refresh_server_error_is_not_an_auth_error(session):
+    """A server incident on the token endpoint must not force a new sign-in."""
+    session.add("POST", TOKEN_URL, status=500, payload={"detail": "boom"})
+    client = GeocoverClient(session, TokenSet("", "rt_0", 0), client_secret="secret")
+    with pytest.raises(GeocoverApiError) as exc:
+        await client.async_refresh_tokens()
+    assert not isinstance(exc.value, GeocoverAuthError)
+
+
+async def test_refresh_other_400_is_not_an_auth_error(session):
+    session.add("POST", TOKEN_URL, status=400, payload={"error": "invalid_request"})
+    client = GeocoverClient(session, TokenSet("", "rt_0", 0), client_secret="secret")
+    with pytest.raises(GeocoverApiError) as exc:
+        await client.async_refresh_tokens()
+    assert exc.value.error == "invalid_request"
+
+
+async def test_rate_limit_carries_retry_after(session):
+    session.add("GET", API + "bike", status=429, payload={"detail": "slow down"},
+                headers={"Retry-After": "120"})
+    with pytest.raises(GeocoverRateLimitError) as exc:
+        await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_bikes()
+    assert exc.value.status == 429
+    assert exc.value.retry_after == 120
+
+
+async def test_retry_after_as_http_date(session):
+    session.add("GET", API + "bike", status=503, payload={},
+                headers={"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"})
+    with pytest.raises(GeocoverApiError) as exc:
+        await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_bikes()
+    assert exc.value.retry_after == 0
+
+
+@pytest.mark.parametrize("payload", [[{"name": "no id"}], {"not": "a list"}, ["text"]])
+async def test_malformed_bikes_raise_response_error(session, payload):
+    session.add("GET", API + "bike", payload=payload)
+    with pytest.raises(GeocoverResponseError):
+        await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_bikes()
+
+
+async def test_invalid_json_raises_response_error(session):
+    session.add("GET", API + "bike", payload=ValueError("Expecting value"))
+    with pytest.raises(GeocoverResponseError):
+        await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_bikes()
+
+
+async def test_malformed_token_response(session):
+    session.add("POST", TOKEN_URL, payload={"token_type": "Bearer"})
+    client = GeocoverClient(session, TokenSet("", "rt_0", 0), client_secret="secret")
+    with pytest.raises(GeocoverResponseError):
+        await client.async_refresh_tokens()
+
+
+async def test_malformed_login_settings(session):
+    session.add("GET", f"{IDS_API}/client/client-1/setting/loginpage", payload={})
+    client = GeocoverClient(session, client_id="client-1", client_secret="secret")
+    with pytest.raises(GeocoverResponseError):
+        await client.async_start_login()
+
+
+async def test_rides_no_content(session):
+    session.add("GET", API + "v2/bike/1/ride", status=204, repeat=True)
+    client = GeocoverClient(session, fresh_tokens(), client_secret="secret")
+    page = await client.async_get_rides(1)
+    assert page.rides == [] and page.total == 0
+    assert await client.async_get_latest_ride(1) is None
+
+
+async def test_ride_total(session):
+    session.add("GET", API + "v2/bike/1/ride",
+                payload={"meta": {"limit": 1, "offset": 0, "total_records": 678},
+                         "data": [ride(678, "2026-09-28T16:13:36+0000")]})
+    page = await GeocoverClient(session, fresh_tokens(), client_secret="secret").async_get_rides(
+        1, limit=1)
+    assert page.total == 678
+
+
+async def test_language_header(session):
+    session.add("GET", API + "bike", payload=[])
+    client = GeocoverClient(session, fresh_tokens(), client_secret="secret", language="en")
+    await client.async_get_bikes()
+    assert session.calls[0].kwargs["headers"]["Accept-Language"] == "en"

@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pygeocover"
-version = "0.1.0"
+version = "0.2.0"
 description = "Client asynchrone non officiel pour l'API Decathlon Geocover (Conneqtech)"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["aiohttp>=3.9"]
 license = {text = "MIT"}
 authors = [{name = "3615nulsi"}]

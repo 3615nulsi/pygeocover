@@ -50,8 +50,16 @@ async with aiohttp.ClientSession() as session:
 | `async_get_geofences(id)` | `GET bike/{id}/geofence` |
 | `async_get_rides(id, limit, offset)` / `async_get_latest_ride(id)` | `GET v2/bike/{id}/ride` |
 
-Exceptions : `GeocoverAuthError` (reconnexion nécessaire), `GeocoverConnectionError`
-(transitoire), `GeocoverApiError`, `GeocoverLoginError`.
+Exceptions (toutes dérivées de `GeocoverError`) :
+- `GeocoverAuthError` : reconnexion nécessaire (refresh_token refusé : `invalid_grant`, 401, 403) ;
+- `GeocoverConnectionError` : serveur injoignable ou délai dépassé (transitoire) ;
+- `GeocoverApiError` : réponse d'erreur HTTP ; attributs `status`, `error` (code OAuth),
+  `retry_after` (secondes, d'après l'en-tête `Retry-After`) ;
+- `GeocoverRateLimitError` (sous-classe de `GeocoverApiError`) : HTTP 429 ;
+- `GeocoverResponseError` : réponse au format inattendu (changement d'API ?) ;
+- `GeocoverLoginError` : connexion impossible (code expiré, adresse collée invalide).
+
+`GeocoverClient(..., language="fr")` règle l'en-tête `Accept-Language`.
 
 ## Points d'attention
 - **refresh_token rotatif à usage unique** : chaque rafraîchissement l'invalide ; le client appelle
