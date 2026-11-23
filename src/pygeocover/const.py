@@ -11,6 +11,8 @@ APP_REDIRECT_URI = "tech.conneq.decathlon://decathlon.app.ids.conneq.tech"
 
 IDS_API = "https://api.ids.conneq.tech"
 TOKEN_URL = IDS_API + "/oauth"
+# "Whoops!" page the browser ends on after signing in: its address carries the code.
+LOGIN_REDIRECT_URL = "https://login.ids.conneq.tech/redirect"
 
 # redirectURI placée dans le `state` de login : volontairement non autorisée pour que
 # la page login.ids.conneq.tech échoue sans consommer le code Decathlon (voir auth.py).
@@ -19,6 +21,7 @@ UNROUTABLE_REDIRECT_URI = "https://localhost/pygeocover"
 # marge avant expiration à partir de laquelle on rafraîchit l'access_token (s)
 TOKEN_REFRESH_MARGIN = 300
 REQUEST_TIMEOUT = 30
+DEFAULT_LANGUAGE = "fr"
 
 
 def bike_api_url(brand: str = DEFAULT_BRAND) -> str:

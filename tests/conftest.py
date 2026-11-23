@@ -9,11 +9,14 @@ import pytest
 
 
 class FakeResponse:
-    def __init__(self, status: int, payload: Any) -> None:
+    def __init__(self, status: int, payload: Any, headers: Optional[Dict[str, str]] = None) -> None:
         self.status = status
         self._payload = payload
+        self.headers = headers or {}
 
     async def json(self, content_type: Optional[str] = None) -> Any:
+        if isinstance(self._payload, BaseException):
+            raise self._payload
         return self._payload
 
     async def text(self) -> str:
@@ -52,9 +55,11 @@ class FakeSession:
         self.calls: List[Call] = []
 
     def add(self, method: str, url: str, *, status: int = 200, payload: Any = None,
-            exception: BaseException | None = None, repeat: bool = False) -> None:
+            exception: BaseException | None = None, repeat: bool = False,
+            headers: Optional[Dict[str, str]] = None) -> None:
         self._routes[(method.upper(), url)].append(
-            {"status": status, "payload": payload, "exception": exception, "repeat": repeat})
+            {"status": status, "payload": payload, "exception": exception, "repeat": repeat,
+             "headers": headers})
 
     def request(self, method: str, url: str, **kwargs: Any) -> _Ctx:
         self.calls.append(Call(method.upper(), url, kwargs))
@@ -62,7 +67,8 @@ class FakeSession:
         if not queue:
             raise AssertionError(f"Requête inattendue : {method} {url}")
         spec = queue[0] if queue[0]["repeat"] else queue.pop(0)
-        return _Ctx(FakeResponse(spec["status"], spec["payload"]), spec["exception"])
+        return _Ctx(FakeResponse(spec["status"], spec["payload"], spec["headers"]),
+                    spec["exception"])
 
     def calls_to(self, method: str, url: str) -> List[Call]:
         return [c for c in self.calls if c.method == method.upper() and c.url == url]

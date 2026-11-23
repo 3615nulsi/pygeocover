@@ -112,20 +112,22 @@ class LoginRequest:
         """Code Decathlon depuis l'URL de la page d'erreur collée (ou le code seul)."""
         pasted = (pasted or "").strip()
         if not pasted:
-            raise GeocoverLoginError("Rien n'a été collé.")
+            raise GeocoverLoginError("Nothing was pasted.")
         if "code=" not in pasted:
             if "/" in pasted or "?" in pasted or " " in pasted:
-                raise GeocoverLoginError("Aucun paramètre code= dans l'adresse collée.")
+                raise GeocoverLoginError("No code= parameter in the pasted address.")
             return pasted
         query = urlparse(pasted).query or pasted.split("?", 1)[-1]
         params = parse_qs(query)
         code = params.get("code", [""])[0]
         state = params.get("state", [None])[0]
         if not code:
-            raise GeocoverLoginError("Paramètre code vide dans l'adresse collée.")
+            raise GeocoverLoginError("Empty code parameter in the pasted address.")
         if state is not None and state != self.state:
-            raise GeocoverLoginError("Cette adresse ne correspond pas à la connexion en cours "
-                                     "(state différent) : relancez la connexion.")
+            raise GeocoverLoginError(
+                "This address does not match the current sign-in (different state): "
+                "start the sign-in again."
+            )
         return code
 
     def idp_exchange_payload(self, idp_code: str) -> Dict[str, Any]:
